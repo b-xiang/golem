@@ -6,6 +6,9 @@ from golem.network.p2p.node import Node
 from golem.resource.dirmanager import DirManager
 from apps.core.task.coretaskstate import TaskDefinition, Options
 from apps.fireworks.fireworksenvironment import FireworksTaskEnvironment
+from golem.docker.environment import DockerEnvironment
+from golem.core.common import timeout_to_deadline
+from golem_messages import idgenerator
 
 class FireworksTaskTypeInfo(TaskTypeInfo):
     def __init__(self):
@@ -64,13 +67,44 @@ class FireworksTask(Task):
                 task_definition: TaskDefinition) -> None:
         super().__init__(header, src_code, task_definition)
 
+        self.tmp_dir = ''
+        self.environment = FireworksTaskEnvironment()
+
+        if task_definition.docker_images:
+            self.docker_images = task_definition.docker_images
+        elif isinstance(self.environment, DockerEnvironment):
+            self.docker_images = self.environment.docker_images
+        else:
+            self.docker_images = None
+
+
     def initialize(self, dir_manager):
         """Called after adding a new task, may initialize or create some resources
         or do other required operations.
         :param DirManager dir_manager: DirManager instance for accessing temp dir for this task
         """
-        import pdb; pdb.set_trace()
-        pass
+        dir_manager.clear_temporary(self.header.task_id)
+        self.tmp_dir = dir_manager.get_task_temporary_dir(self.header.task_id,
+                                                          create=True)
+
+    def _new_compute_task_def(self, subtask_id, extra_data,
+                              perf_index=0):
+        ctd = golem_messages.message.ComputeTaskDef()
+        ctd['task_id'] = self.header.task_id
+        ctd['subtask_id'] = subtask_id
+        ctd['extra_data'] = extra_data
+        ctd['short_description'] = self.short_extra_data_repr(extra_data)
+        ctd['src_code'] = self.src_code
+        ctd['performance'] = perf_index
+        if self.docker_images:
+            ctd['docker_images'] = [di.to_dict() for di in self.docker_images]
+        ctd['deadline'] = min(timeout_to_deadline(self.header.subtask_timeout),
+                              self.header.deadline)
+
+        return ctd
+
+    def create_subtask_id(self) -> str:
+        return idgenerator.generate_new_id_from_id(self.header.task_id)
 
     def query_extra_data(self, perf_index: float, num_cores: int = 1,
                          node_id: Optional[str] = None,
@@ -82,8 +116,10 @@ class FireworksTask(Task):
         :param node_id: id of a node that wants to get a next subtask
         :param node_name: name of a node that wants to get a next subtask
         """
-        import pdb; pdb.set_trace()
-        pass
+        subtask_id = self.create_subtask_id()
+        ctd = self._new_compute_task_def(subtask_id, dict(), 0)
+        return Task.ExtraData(ctd=ctd)
+
     def query_extra_data_for_test_task(self) -> golem_messages.message.ComputeTaskDef:  # noqa pylint:disable=line-too-long
         import pdb; pdb.set_trace()
         pass
@@ -93,8 +129,7 @@ class FireworksTask(Task):
         :param extra_data:
         :return str:
         """
-        import pdb; pdb.set_trace()
-        pass
+        return 'short extra data repr for fireworks task'
 
 
     def needs_computation(self) -> bool:

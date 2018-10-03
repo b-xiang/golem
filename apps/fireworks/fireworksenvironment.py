@@ -5,7 +5,7 @@ from golem.docker.environment import DockerEnvironment
 
 class FireworksTaskEnvironment(DockerEnvironment):
     DOCKER_IMAGE = "golemfactory/base"
-    DOCKER_TAG = "1.0"
+    DOCKER_TAG = "1.2"
     ENV_ID = "fireworks"
     APP_DIR = path.join(get_golem_path(), 'apps', 'fireworks')
     SCRIPT_NAME = "fireworks.py"
